@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>432 Tuner</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600&family=Space+Mono:wght@400;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #0d0f14;
+  --surface: #161a23;
+  --border:  #242836;
+  --text:    #e8eaf0;
+  --muted:   #6b7280;
+  --crystal: #7eb8d4;
+  --sharp:   #e05c5c;
+  --flat:    #e09a3c;
+  --intune:  #5ccea0;
+  --glow:    rgba(126,184,212,0.18);
+}
+
+html, body {
+  height: 100%; background: var(--bg); color: var(--text);
+  font-family: 'Space Grotesk', sans-serif;
+  -webkit-tap-highlight-color: transparent; user-select: none;
+  overflow-x: hidden;
+}
+
+#welcome {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; min-height: 100vh; padding: 2rem;
+  text-align: center; gap: 2rem;
+}
+.logo-ring {
+  width: 110px; height: 110px; border-radius: 50%;
+  border: 2px solid var(--crystal);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 32px var(--glow), inset 0 0 20px var(--glow);
+  animation: pulse 3s ease-in-out infinite;
+}
+.logo-ring svg { width: 54px; height: 54px; }
+@keyframes pulse {
+  0%,100% { box-shadow: 0 0 24px var(--glow), inset 0 0 16px var(--glow); }
+  50%      { box-shadow: 0 0 48px rgba(126,184,212,.32), inset 0 0 28px rgba(126,184,212,.22); }
+}
+.welcome-title { font-family:'Space Mono',monospace; font-size:1.6rem; letter-spacing:.08em; color:var(--crystal); }
+.welcome-sub   { font-size:.95rem; color:var(--muted); line-height:1.6; max-width:280px; }
+.start-btn {
+  background: var(--crystal); color: var(--bg); border: none;
+  border-radius: 50px; padding: 1rem 2.8rem;
+  font-family:'Space Grotesk',sans-serif; font-size:1.05rem; font-weight:600;
+  cursor:pointer; letter-spacing:.04em; -webkit-appearance:none;
+  transition: transform .15s;
+}
+.start-btn:active { transform: scale(.96); }
+.mic-note { font-size:.78rem; color:var(--muted); max-width:260px; line-height:1.5; }
+
+#error-screen {
+  display:none; flex-direction:column; align-items:center;
+  justify-content:center; min-height:100vh; padding:2rem;
+  text-align:center; gap:1.5rem;
+}
+.error-icon  { font-size:2.5rem; }
+.error-title { font-size:1.1rem; font-weight:600; color:var(--sharp); }
+.error-body  { font-size:.88rem; color:var(--muted); line-height:1.6; max-width:280px; }
+.retry-btn {
+  background:transparent; color:var(--crystal); border:1px solid var(--crystal);
+  border-radius:50px; padding:.75rem 2rem;
+  font-family:'Space Grotesk',sans-serif; font-size:.95rem;
+  cursor:pointer; -webkit-appearance:none;
+}
+
+#tuner { display:none; flex-direction:column; min-height:100vh; padding:1.2rem 1rem 2rem; gap:1.2rem; }
+
+.tabs { display:flex; gap:.5rem; }
+.tab {
+  flex:1; padding:.6rem .4rem; border-radius:10px;
+  border:1px solid var(--border); background:var(--surface);
+  color:var(--muted); font-family:'Space Grotesk',sans-serif; font-size:.82rem;
+  font-weight:600; cursor:pointer; text-align:center; letter-spacing:.04em;
+  -webkit-appearance:none; transition: color .15s, border-color .15s, background .15s;
+}
+.tab.active { border-color:var(--crystal); color:var(--crystal); background:rgba(126,184,212,.08); }
+
+.tuner-header { display:flex; align-items:center; justify-content:space-between; }
+.tuner-title  { font-family:'Space Mono',monospace; font-size:.85rem; color:var(--crystal); letter-spacing:.1em; }
+.live-badge   { display:flex; align-items:center; gap:.4rem; font-size:.75rem; color:var(--intune); font-family:'Space Mono',monospace; }
+.live-dot     { width:7px; height:7px; border-radius:50%; background:var(--intune); animation:blink 1.4s ease-in-out infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+.note-display {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:20px; padding:1.4rem 1rem; text-align:center;
+  display:flex; flex-direction:column; gap:.4rem;
+}
+.detected-label { font-size:.72rem; color:var(--muted); letter-spacing:.12em; text-transform:uppercase; }
+.detected-note  { font-family:'Space Mono',monospace; font-size:4rem; font-weight:700; line-height:1; color:var(--text); transition:color .2s; }
+.detected-freq  { font-family:'Space Mono',monospace; font-size:.82rem; color:var(--muted); }
+
+.meter-wrap { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:1.1rem 1.2rem .9rem; }
+.meter-label { font-size:.7rem; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; margin-bottom:.8rem; text-align:center; }
+.meter-bar-wrap { position:relative; height:10px; background:var(--border); border-radius:999px; overflow:hidden; }
+.meter-fill {
+  position:absolute; top:0; bottom:0; width:4px; border-radius:999px;
+  background:var(--crystal); left:50%; transform:translateX(-50%);
+  transition:left .1s ease-out, background .2s;
+}
+.meter-center-mark {
+  position:absolute; top:-3px; bottom:-3px; left:50%; width:2px;
+  background:var(--muted); transform:translateX(-50%); border-radius:999px;
+}
+.meter-status { text-align:center; margin-top:.7rem; font-family:'Space Mono',monospace; font-size:.85rem; letter-spacing:.06em; transition:color .2s; }
+.cents-value  { text-align:center; font-size:.75rem; color:var(--muted); margin-top:.3rem; font-family:'Space Mono',monospace; }
+
+.strings-label { font-size:.72rem; color:var(--muted); letter-spacing:.12em; text-transform:uppercase; padding-left:.2rem; }
+.strings-grid  { display:grid; gap:.6rem; }
+.strings-grid.cols-3 { grid-template-columns: repeat(3,1fr); }
+.strings-grid.cols-4 { grid-template-columns: repeat(4,1fr); }
+
+.string-btn {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:14px; padding:.75rem .4rem; cursor:pointer; text-align:center;
+  transition:border-color .15s, background .15s; -webkit-appearance:none;
+  display:flex; flex-direction:column; align-items:center; gap:.2rem;
+}
+.string-btn.active  { border-color:var(--crystal); background:rgba(126,184,212,.08); }
+.string-btn.in-tune { border-color:var(--intune);  background:rgba(92,206,160,.08); }
+.string-btn .s-name { font-family:'Space Mono',monospace; font-size:1.1rem; font-weight:700; color:var(--text); }
+.string-btn .s-note { font-size:.68rem; color:var(--muted); font-family:'Space Mono',monospace; }
+.string-btn .s-freq { font-size:.63rem; color:var(--muted); font-family:'Space Mono',monospace; }
+
+.auto-row {
+  display:flex; align-items:center; justify-content:space-between;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:14px; padding:.85rem 1rem;
+}
+.auto-label { font-size:.88rem; }
+.auto-sub   { font-size:.72rem; color:var(--muted); margin-top:.15rem; }
+.toggle {
+  width:46px; height:26px; background:var(--border); border-radius:999px;
+  position:relative; cursor:pointer; transition:background .2s;
+  flex-shrink:0; border:none; -webkit-appearance:none;
+}
+.toggle.on { background:var(--crystal); }
+.toggle::after {
+  content:''; position:absolute; width:20px; height:20px;
+  border-radius:50%; background:#fff; top:3px; left:3px; transition:transform .2s;
+}
+.toggle.on::after { transform:translateX(20px); }
+</style>
+</head>
+<body>
+
+<div id="welcome">
+  <div class="logo-ring">
+    <svg viewBox="0 0 54 54" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M27 8 L27 46" stroke="#7eb8d4" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M20 8 L20 26 Q20 34 27 34 Q34 34 34 26 L34 8" stroke="#7eb8d4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </svg>
+  </div>
+  <div class="welcome-title">432 TUNER</div>
+  <div class="welcome-sub">Guitar · Bass · Lyre — all tuned to the 432 Hz system. Tap below to allow microphone access.</div>
+  <button class="start-btn" id="startBtn">Allow Microphone</button>
+  <div class="mic-note">Your browser will ask for microphone permission. Nothing is recorded or sent anywhere.</div>
+</div>
+
+<div id="error-screen">
+  <div class="error-icon">🎙</div>
+  <div class="error-title">Microphone access denied</div>
+  <div class="error-body">
+    On iPhone: go to <strong>Settings → Safari → Microphone</strong> and set it to Allow. Then come back and try again.
+  </div>
+  <button class="retry-btn" id="retryBtn">Try Again</button>
+</div>
+
+<div id="tuner">
+  <div class="tuner-header">
+    <div class="tuner-title">432 HZ TUNER</div>
+    <div class="live-badge"><div class="live-dot"></div> LIVE</div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-inst="guitar">Guitar</button>
+    <button class="tab" data-inst="bass">Bass</button>
+    <button class="tab" data-inst="lyre">Lyre</button>
+  </div>
+
+  <div class="note-display">
+    <div class="detected-label">Detected Note</div>
+    <div class="detected-note" id="detectedNote">—</div>
+    <div class="detected-freq" id="detectedFreq">play a string</div>
+  </div>
+
+  <div class="meter-wrap">
+    <div class="meter-label">Tuning Meter</div>
+    <div class="meter-bar-wrap">
+      <div class="meter-center-mark"></div>
+      <div class="meter-fill" id="meterFill"></div>
+    </div>
+    <div class="meter-status" id="meterStatus" style="color:var(--muted)">—</div>
+    <div class="cents-value" id="centsValue"></div>
+  </div>
+
+  <div class="strings-label">Target String</div>
+  <div class="strings-grid cols-3" id="stringsGrid"></div>
+
+  <div class="auto-row">
+    <div>
+      <div class="auto-label">Auto-detect string</div>
+      <div class="auto-sub">Picks the closest string automatically</div>
+    </div>
+    <button class="toggle on" id="autoToggle" aria-label="Toggle auto-detect"></button>
+  </div>
+</div>
+
+<script>
+const INSTRUMENTS = {
+  guitar: {
+    cols: 3,
+    range: [65, 400],
+    strings: [
+      { name:'Low E', note:'E2', freq:80.91 },
+      { name:'A',     note:'A2', freq:108.00 },
+      { name:'D',     note:'D3', freq:144.16 },
+      { name:'G',     note:'G3', freq:192.44 },
+      { name:'B',     note:'B3', freq:242.45 },
+      { name:'High E',note:'E4', freq:323.64 },
+    ]
+  },
+  bass: {
+    cols: 4,
+    range: [30, 120],
+    strings: [
+      { name:'E', note:'E1', freq:40.45 },
+      { name:'A', note:'A1', freq:54.00 },
+      { name:'D', note:'D2', freq:72.09 },
+      { name:'G', note:'G2', freq:96.22 },
+    ]
+  },
+  lyre: {
+    cols: 4,
+    range: [185, 900],
+    strings: [
+      { name:'G', note:'G3', freq:192.44 },
+      { name:'A', note:'A3', freq:216.00 },
+      { name:'B', note:'B3', freq:242.45 },
+      { name:'C', note:'C4', freq:256.87 },
+      { name:'D', note:'D4', freq:288.32 },
+      { name:'E', note:'E4', freq:323.64 },
+      { name:'F', note:'F4', freq:342.88 },
+      { name:'G', note:'G4', freq:384.87 },
+      { name:'A', note:'A4', freq:432.00 },
+      { name:'B', note:'B4', freq:484.90 },
+      { name:'C', note:'C5', freq:513.74 },
+      { name:'D', note:'D5', freq:576.65 },
+      { name:'E', note:'E5', freq:647.27 },
+      { name:'F', note:'F5', freq:685.76 },
+      { name:'G', note:'G5', freq:769.74 },
+      { name:'A', note:'A5', freq:864.00 },
+    ]
+  }
+};
+
+let audioCtx, analyser;
+let currentInst = 'guitar';
+let selectedIdx = 0;
+let autoMode    = true;
+
+const welcomeEl    = document.getElementById('welcome');
+const errorEl      = document.getElementById('error-screen');
+const tunerEl      = document.getElementById('tuner');
+const detectedNote = document.getElementById('detectedNote');
+const detectedFreq = document.getElementById('detectedFreq');
+const meterFill    = document.getElementById('meterFill');
+const meterStatus  = document.getElementById('meterStatus');
+const centsValue   = document.getElementById('centsValue');
+const stringsGrid  = document.getElementById('stringsGrid');
+const autoToggle   = document.getElementById('autoToggle');
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    currentInst = tab.dataset.inst;
+    selectedIdx = 0;
+    autoMode    = true;
+    autoToggle.classList.add('on');
+    buildStringButtons();
+    resetDisplay();
+  });
+});
+
+function buildStringButtons() {
+  const inst = INSTRUMENTS[currentInst];
+  stringsGrid.className = `strings-grid cols-${inst.cols}`;
+  stringsGrid.innerHTML = '';
+  inst.strings.forEach((s, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'string-btn' + (i === selectedIdx ? ' active' : '');
+    btn.innerHTML = `
+      <div class="s-name">${s.name}</div>
+      <div class="s-note">${s.note}</div>
+      <div class="s-freq">${s.freq}</div>
+    `;
+    btn.addEventListener('click', () => {
+      selectedIdx = i;
+      autoMode    = false;
+      autoToggle.classList.remove('on');
+      updateStringButtons();
+    });
+    stringsGrid.appendChild(btn);
+  });
+}
+
+function updateStringButtons() {
+  document.querySelectorAll('.string-btn').forEach((b, i) => {
+    b.classList.toggle('active', i === selectedIdx);
+    b.classList.remove('in-tune');
+  });
+}
+
+autoToggle.addEventListener('click', () => {
+  autoMode = !autoMode;
+  autoToggle.classList.toggle('on', autoMode);
+});
+
+document.getElementById('startBtn').addEventListener('click', startMic);
+document.getElementById('retryBtn').addEventListener('click', startMic);
+
+async function startMic() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false });
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 8192;
+    analyser.smoothingTimeConstant = 0.85;
+    audioCtx.createMediaStreamSource(stream).connect(analyser);
+    welcomeEl.style.display = 'none';
+    errorEl.style.display   = 'none';
+    tunerEl.style.display   = 'flex';
+    buildStringButtons();
+    loop();
+  } catch(e) {
+    welcomeEl.style.display = 'none';
+    errorEl.style.display   = 'flex';
+    tunerEl.style.display   = 'none';
+  }
+}
+
+function detectPitch(buf, sr) {
+  let rms = 0;
+  for (let i = 0; i < buf.length; i++) rms += buf[i]*buf[i];
+  if (Math.sqrt(rms/buf.length) < 0.006) return null;
+  const SIZE = buf.length;
+  const corr = new Float32Array(SIZE);
+  for (let lag = 0; lag < SIZE; lag++) {
+    let s = 0;
+    for (let i = 0; i < SIZE-lag; i++) s += buf[i]*buf[i+lag];
+    corr[lag] = s;
+  }
+  let d = 0;
+  while (d < SIZE && corr[d] > corr[d+1]) d++;
+  let maxVal = -Infinity, maxPos = -1;
+  for (let i = d; i < SIZE; i++) {
+    if (corr[i] > maxVal) { maxVal = corr[i]; maxPos = i; }
+  }
+  if (maxPos < 1 || maxPos >= SIZE-1 || maxVal < 0.01) return null;
+  const y1 = corr[maxPos-1], y2 = corr[maxPos], y3 = corr[maxPos+1];
+  const refined = maxPos - (y3-y1)/(2*(2*y2-y1-y3));
+  return sr / refined;
+}
+
+function freqToCents(f, t) { return 1200 * Math.log2(f/t); }
+
+function nearestString(freq) {
+  const strings = INSTRUMENTS[currentInst].strings;
+  let best = 0, bestDiff = Infinity;
+  strings.forEach((s,i) => {
+    const d = Math.abs(freqToCents(freq, s.freq));
+    if (d < bestDiff) { bestDiff = d; best = i; }
+  });
+  return best;
+}
+
+function resetDisplay() {
+  detectedNote.textContent   = '—';
+  detectedNote.style.color   = 'var(--text)';
+  detectedFreq.textContent   = 'play a string';
+  meterStatus.textContent    = '—';
+  meterStatus.style.color    = 'var(--muted)';
+  centsValue.textContent     = '';
+  meterFill.style.left       = '50%';
+  meterFill.style.background = 'var(--crystal)';
+  document.querySelectorAll('.string-btn').forEach(b => b.classList.remove('in-tune'));
+}
+
+function loop() {
+  requestAnimationFrame(loop);
+  if (!analyser) return;
+  const buf = new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(buf);
+  const pitch = detectPitch(buf, audioCtx.sampleRate);
+  const [lo, hi] = INSTRUMENTS[currentInst].range;
+  if (!pitch || pitch < lo || pitch > hi) { resetDisplay(); return; }
+
+  const idx = autoMode ? nearestString(pitch) : selectedIdx;
+  if (autoMode && idx !== selectedIdx) { selectedIdx = idx; updateStringButtons(); }
+
+  const target = INSTRUMENTS[currentInst].strings[idx].freq;
+  const cents  = freqToCents(pitch, target);
+  const pct    = ((Math.max(-50, Math.min(50, cents)) + 50) / 100) * 100;
+  meterFill.style.left = pct + '%';
+
+  const abs = Math.abs(cents);
+  const color      = abs < 4 ? 'var(--intune)' : cents < 0 ? 'var(--flat)' : 'var(--sharp)';
+  const statusText = abs < 4 ? 'IN TUNE ✓'     : cents < 0 ? 'FLAT — tune up ↑' : 'SHARP — tune down ↓';
+
+  meterFill.style.background = color;
+  meterStatus.textContent    = statusText;
+  meterStatus.style.color    = color;
+  detectedNote.style.color   = color;
+  centsValue.textContent     = (cents >= 0 ? '+' : '') + cents.toFixed(1) + ' cents';
+
+  const s = INSTRUMENTS[currentInst].strings[idx];
+  detectedNote.textContent = s.name + ' ' + s.note;
+  detectedFreq.textContent = pitch.toFixed(1) + ' Hz  ·  target ' + target + ' Hz';
+
+  document.querySelectorAll('.string-btn').forEach((b, i) => {
+    b.classList.toggle('in-tune', i === idx && abs < 4);
+    b.classList.toggle('active',  i === idx);
+  });
+}
+</script>
+</body>
+</html>
