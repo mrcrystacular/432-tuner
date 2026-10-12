@@ -1,4 +1,3 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <!doctype html>
 <html lang="en">
 <head>
@@ -238,7 +237,21 @@ function mpm(x, n, sr, nsdf, minF, maxF){
   const shift = Math.abs(den) > 1e-12 ? 0.5*(a-c)/den : 0;
   return { freq: sr/(pick+shift), clarity: b - 0.25*(a-c)*shift };
 }
-function detectPitch(raw, sr, work){
+// Amplitude of one partial (Hann-windowed Goertzel over the full-rate window).
+function partialAmp(raw, sr, f, hann){
+  const N = raw.length, cw = 2*Math.cos(2*Math.PI*f/sr);
+  let s1 = 0, s2 = 0;
+  for (let i=0;i<N;i++){ const s0 = raw[i]*hann[i] + cw*s1 - s2; s2 = s1; s1 = s0; }
+  return Math.sqrt(Math.max(0, s1*s1 + s2*s2 - cw*s1*s2));
+}
+// How strongly the signal repeats at the period of f (normalised, fractional lag).
+function lagScore(raw, sr, f){
+  const lag = sr/f, L = Math.floor(lag), fr = lag - L, N = raw.length;
+  let r = 0, m = 0;
+  for (let j=0; j+L+1<N; j++){ const y = raw[j+L]*(1-fr) + raw[j+L+1]*fr; r += raw[j]*y; m += raw[j]*raw[j] + y*y; }
+  return m > 0 ? 2*r/m : 0;
+}
+function detectPitch(raw, sr, work, fixMix){
   // Coarse pass on a 2x/4x downsampled window: covers low B on a 5-string down to ~27 Hz.
   const decim = sr >= 88000 ? 4 : 2;
   const n = Math.floor(raw.length/decim);
@@ -249,6 +262,27 @@ function detectPitch(raw, sr, work){
   for (let i=0;i<n;i++){ x[i]-=mean; e+=x[i]*x[i]; }
   const rms = Math.sqrt(e/n);
   let res = mpm(x, n, sr/decim, nsdf, 27, 1600);
+  // Two strings ringing together (e.g. B3 + E4) repeat at a shared, much lower period
+  // (E2) that has no energy of its own. Spot that "phantom" low note and pick the
+  // real ringing note with the strongest periodicity instead.
+  if (fixMix && res && res.freq < 200){
+    if (!work.hann || work.hann.length !== raw.length){
+      work.hann = new Float32Array(raw.length);
+      for (let i=0;i<raw.length;i++) work.hann[i] = 0.5 - 0.5*Math.cos(2*Math.PI*i/(raw.length-1));
+    }
+    const f = res.freq, A = [0]; let maxA = 0;
+    for (let h=1; h<=8 && f*h < sr/2; h++){ A[h] = partialAmp(raw, sr, f*h, work.hann); if (A[h] > maxA) maxA = A[h]; }
+    if (maxA > 0 && A[1] < 0.15*maxA && A[2] < 0.15*maxA){
+      let best = 0, bs = -1;
+      for (let h=3; h<A.length; h++){
+        if (A[h] >= 0.3*maxA){ const sc = lagScore(raw, sr, f*h); if (sc > bs){ bs = sc; best = f*h; } }
+      }
+      // A real low note scores poorly at its upper partials; only a genuine mix scores well.
+      if (best && bs > 0.55) res = { freq: best, clarity: bs };
+      else if (f >= 60) res = null; // a guitar-range "note" with no fundamental: wait for a cleaner frame
+
+    }
+  }
   // Fine pass at full rate for higher notes, where a sample is a bigger slice of the period.
   if (res && res.freq > 220){
     const fn = 2048, off = raw.length-fn, xf = work.xf;
@@ -265,7 +299,7 @@ function detectPitch(raw, sr, work){
 const S = {
   running:false, ctx:null, stream:null, analyser:null, raw:null, sr:48000,
   work:{ x:new Float32Array(4096), xf:new Float32Array(2048), nsdf:new Float32Array(4096) },
-  note:null, pending:null, pendingCount:0, hist:[], disp:0,
+  note:null, pending:null, pendingCount:0, pendingAt:0, noteRms:0, hist:[], disp:0,
   lastSignal:-1e9, lastDetect:0, noise:0.004, level:0, freq:0,
   inZoneMs:0, outMs:0, locked:false, strobe:0, bursts:[],
   tol:+store.get("tol","5"), inst:store.get("inst","guitar"),
@@ -349,24 +383,32 @@ function playTone(){
 /* ---------- Analysis per frame ---------- */
 function analyse(now){
   S.analyser.getFloatTimeDomainData(S.raw);
-  const r = detectPitch(S.raw, S.sr, S.work);
+  const r = detectPitch(S.raw, S.sr, S.work, S.inst !== "bass4" && S.inst !== "bass5");
   S.level = S.level*0.6 + Math.min(1, r.rms*12)*0.4;
-  const gate = Math.max(0.004, S.noise*2.5);
-  const valid = r.freq > 26 && r.freq < 4200 && r.clarity > 0.8 && r.rms > gate;
-  if (!valid){ S.noise = S.noise*0.98 + r.rms*0.02; return; }
+  // Noise floor follows the quietest moments: drops fast, rises very slowly,
+  // so loud low strings ringing out don't raise the gate for the thin high strings.
+  S.noise = r.rms < S.noise ? S.noise*0.7 + r.rms*0.3 : S.noise*0.998 + r.rms*0.002;
+  const gate = Math.max(0.0015, S.noise*2);
+  if (!(r.freq > 26 && r.freq < 4200 && r.rms > gate)) return;
   const mf = 69 + 12*Math.log2(r.freq/REF);
-  if (S.note !== null && Math.abs(mf - S.note) <= 0.62){
+  const onCurrent = S.note !== null && Math.abs(mf - S.note) <= 0.62;
+  if (r.clarity < (onCurrent ? 0.6 : 0.72)) return;
+  const onset = r.rms > S.noteRms*1.8;
+  if (onCurrent){
     S.hist.push((mf - S.note)*100); if (S.hist.length > 7) S.hist.shift();
-    S.pending = null; S.pendingCount = 0; S.lastSignal = now; S.freq = r.freq;
+    S.noteRms = S.noteRms*0.8 + r.rms*0.2;
+    S.lastSignal = now; S.freq = r.freq;
+    if (now - S.pendingAt > 450){ S.pending = null; S.pendingCount = 0; }
     return;
   }
   const cand = Math.round(mf);
-  if (cand === S.pending) S.pendingCount++; else { S.pending = cand; S.pendingCount = 1; }
-  const need = S.note === null || now - S.lastSignal > 400 ? 2 : 3;
+  if (cand === S.pending && now - S.pendingAt <= 450) S.pendingCount++;
+  else { S.pending = cand; S.pendingCount = 1; S.pendingAt = now; }
+  const need = S.note === null || now - S.lastSignal > 400 || onset ? 2 : 3;
   if (S.pendingCount >= need){
     S.note = cand; S.hist = [(mf-cand)*100]; S.disp = S.hist[0];
     S.locked = false; S.inZoneMs = 0; S.outMs = 0; document.body.classList.remove("locked");
-    S.pending = null; S.pendingCount = 0; S.lastSignal = now; S.freq = r.freq; S.everHeard = true;
+    S.pending = null; S.pendingCount = 0; S.lastSignal = now; S.freq = r.freq; S.everHeard = true; S.noteRms = r.rms;
   }
 }
 const median = a => { const s=[...a].sort((p,q)=>p-q); const m=s.length>>1; return s.length%2?s[m]:(s[m-1]+s[m])/2; };
@@ -621,5 +663,3 @@ if (document.fonts) document.fonts.ready.then(()=>{ ui = {}; });
 </script>
 </body>
 </html>
-
-</body></html>
