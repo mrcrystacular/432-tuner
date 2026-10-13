@@ -86,8 +86,30 @@ body.locked .note{color:var(--win);text-shadow:0 0 34px color-mix(in srgb,var(--
 .seg button{flex:1 1 auto;min-height:40px;border:1px solid var(--line);background:var(--surface);border-radius:10px;
   padding:8px 10px;font-size:12px;white-space:nowrap}
 .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-.strings{display:flex;flex-wrap:wrap;gap:8px;min-height:56px;align-items:stretch}
-.str{flex:1 1 0;min-width:64px;border:1px solid var(--line);border-radius:12px;padding:8px 6px;text-align:center;
+.freq{position:relative}
+.freq-btn{width:100%;min-height:58px;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  border:1px solid var(--ink);background:var(--ink);color:var(--bg);border-radius:14px;padding-inline:20px;
+  font-family:var(--display);font-weight:700;font-size:18px;letter-spacing:.04em;text-transform:uppercase}
+.freq-btn svg{width:22px;height:22px;transition:transform .2s}
+.freq-btn[aria-expanded="true"] svg{transform:rotate(180deg)}
+.freq-menu{position:absolute;left:0;right:0;top:calc(100% + 8px);z-index:3;display:flex;flex-direction:column;gap:2px;
+  padding:6px;border-radius:16px;border:1px solid var(--line);background:var(--surface);
+  box-shadow:0 20px 50px -10px rgb(0 0 0 / .45);transform-origin:top center;animation:drop .16s ease-out}
+@keyframes drop{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
+.freq-opt{display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;
+  border:0;background:transparent;border-radius:11px;padding:12px 14px;min-height:56px}
+.freq-opt:hover{background:color-mix(in srgb,var(--line) 55%,transparent)}
+.freq-opt b{display:block;font-family:var(--display);font-weight:700;font-size:17px}
+.freq-opt small{display:block;margin-top:3px;font-size:11px;color:var(--dim);letter-spacing:.02em}
+.freq-opt .chk{width:20px;height:20px;flex:none;opacity:0}
+.freq-opt[aria-selected="true"]{background:var(--win);color:var(--win-ink)}
+.freq-opt[aria-selected="true"] small{color:var(--win-ink);opacity:.8}
+.freq-opt[aria-selected="true"] .chk{opacity:1}
+.actions .btn.primary{flex:1}
+@media (prefers-reduced-motion: reduce){.freq-menu{animation:none}.freq-btn svg{transition:none}}
+.strings{display:grid;grid-template-columns:repeat(auto-fit,minmax(52px,1fr));gap:6px;min-height:56px;align-items:stretch}
+.str span{white-space:nowrap}
+.str{min-width:0;border:1px solid var(--line);border-radius:12px;padding:8px 6px;text-align:center;
   background:var(--surface);transition:background .3s,border-color .3s,color .3s}
 .str b{display:block;font-family:var(--display);font-size:18px;font-weight:700}
 .str span{font-size:10px;color:var(--dim)}
@@ -119,7 +141,7 @@ body.locked .note{color:var(--win);text-shadow:0 0 34px color-mix(in srgb,var(--
 <body>
 <div class="app" id="app">
   <header class="top">
-    <div class="brand"><b>432</b><span>Tuner</span></div>
+    <div class="brand"><b id="brandRef">432</b><span>Tuner</span></div>
     <div class="top-actions">
       <button class="pill" id="micBtn" type="button" aria-label="Microphone on or off"><i class="dot"></i><span id="micLabel">Mic off</span></button>
       <button class="pill icon-btn" id="themeBtn" type="button" aria-label="Switch daylight or night display">
@@ -144,8 +166,16 @@ body.locked .note{color:var(--win);text-shadow:0 0 34px color-mix(in srgb,var(--
   </div>
   <div class="level" aria-hidden="true"><i id="level"></i></div>
 
+  <div class="freq" id="freq">
+    <button class="freq-btn" id="freqBtn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="freqMenu">
+      <span>Frequency</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="freq-menu" id="freqMenu" role="listbox" aria-label="Frequency" hidden></div>
+  </div>
+
   <div class="group">
-    <div class="label">Instrument</div>
+    <div class="label" id="instLabel">Instrument</div>
     <div class="seg" id="instSeg">
       <button type="button" id="inst-chromatic" data-v="chromatic">Any note</button>
       <button type="button" id="inst-guitar" data-v="guitar">Guitar</button>
@@ -154,7 +184,7 @@ body.locked .note{color:var(--win);text-shadow:0 0 34px color-mix(in srgb,var(--
       <button type="button" id="inst-uke" data-v="uke">Ukulele</button>
     </div>
     <div class="strings" id="strings"></div>
-    <div class="allset" id="allset" hidden>Every string is in tune at 432</div>
+    <div class="allset" id="allset" hidden>Every string is in tune</div>
   </div>
 
   <div class="group">
@@ -166,16 +196,12 @@ body.locked .note{color:var(--win);text-shadow:0 0 34px color-mix(in srgb,var(--
     </div>
   </div>
 
-  <div class="actions">
-    <button class="btn" id="toneBtn" type="button">Hear target</button>
-    <button class="btn primary" id="nextBtn" type="button">Next player</button>
-  </div>
 </div>
 
 <div class="gate" id="gate">
   <div class="gate-card">
-    <h1>A4 = <em>432</em></h1>
-    <p>Play one note at a time. The dial stops spinning and turns gold when you're in tune.</p>
+    <h1 id="gateTitle">A4 = <em>432</em></h1>
+    <p>Play one note at a time. The dial stops spinning and turns gold when you're in tune. Change it any time with the Frequency button.</p>
     <button class="btn primary" id="startBtn" type="button">Start tuning</button>
     <p id="gateMsg">Your browser asks for the microphone once. The mic runs raw, with noise suppression and auto‑gain off, so guitars, bass, voice and keys all read the same way.</p>
   </div>
@@ -185,7 +211,18 @@ body.locked .note{color:var(--win);text-shadow:0 0 34px color-mix(in srgb,var(--
 <script>
 (() => {
 "use strict";
-const REF = 432;
+let REF = 432;
+// Pure modes: whole-number just-intonation targets for each open string (MIDI note -> Hz).
+const MODES = {
+  "432":   { ref:432, title:"432 Hz", sub:"A4 = 432 · Verdi tuning", brand:"432", gate:"A4 = <em>432</em>", idle:69 },
+  "440":   { ref:440, title:"440 Hz", sub:"A4 = 440 · Concert standard", brand:"440", gate:"A4 = <em>440</em>", idle:69 },
+  "528":   { ref:528*Math.pow(2,-3/12), title:"528 Hz", sub:"C5 = 528 · A4 = 444", brand:"528", gate:"C5 = <em>528</em>", idle:72 },
+  "openG": { ref:432, title:"Pure open G", sub:"D G D G B D · 72 96 144 192 240 288", brand:"Open G", gate:"Pure <em>open G</em>", idle:38,
+             strings:[38,43,50,55,59,62], pure:{38:72,43:96,50:144,55:192,59:240,62:288} },
+  "openD": { ref:432, title:"Pure open D", sub:"D A D F♯ A D · 72 108 144 180 216 288", brand:"Open D", gate:"Pure <em>open D</em>", idle:38,
+             strings:[38,45,50,54,57,62], pure:{38:72,45:108,50:144,54:180,57:216,62:288} }
+};
+let MODE_KEY = "432", MODE = MODES["432"];
 const NAMES = ["C","C♯","D","D♯","E","F","F♯","G","G♯","A","A♯","B"];
 const INSTRUMENTS = {
   chromatic: [],
@@ -194,7 +231,10 @@ const INSTRUMENTS = {
   bass5: [23,28,33,38,43],
   uke: [67,60,64,69]
 };
-const hzOf = n => REF * Math.pow(2,(n-69)/12);
+const hzOf = n => (MODE.pure && MODE.pure[n]) || REF * Math.pow(2,(n-69)/12);
+const centsTo = (f, n) => 1200*Math.log2(f/hzOf(n));
+const fmtHz = (h, d=1) => Math.abs(h - Math.round(h)) < 1e-6 ? String(Math.round(h)) : h.toFixed(d);
+const curStrings = () => MODE.strings || INSTRUMENTS[S.inst];
 const nameOf = n => NAMES[((n%12)+12)%12];
 const octOf = n => Math.floor(n/12)-1;
 const $ = id => document.getElementById(id);
@@ -307,6 +347,8 @@ const S = {
   tuned:new Set(), recent:[], toneUntil:0, wake:null, everHeard:false
 };
 if (!INSTRUMENTS[S.inst]) S.inst = "guitar";
+MODE_KEY = store.get("mode","432"); if (!MODES[MODE_KEY]) MODE_KEY = "432";
+MODE = MODES[MODE_KEY]; REF = MODE.ref;
 if (![3,5,7].includes(S.tol)) S.tol = 5;
 
 /* ---------- Audio ---------- */
@@ -384,7 +426,7 @@ function playTone(){
 /* ---------- Analysis per frame ---------- */
 function analyse(now){
   S.analyser.getFloatTimeDomainData(S.raw);
-  const r = detectPitch(S.raw, S.sr, S.work, S.inst !== "bass4" && S.inst !== "bass5");
+  const r = detectPitch(S.raw, S.sr, S.work, !!MODE.strings || (S.inst !== "bass4" && S.inst !== "bass5"));
   S.level = S.level*0.6 + Math.min(1, r.rms*12)*0.4;
   // Noise floor follows the quietest moments: drops fast, rises very slowly,
   // so loud low strings ringing out don't raise the gate for the thin high strings.
@@ -396,7 +438,7 @@ function analyse(now){
   if (r.clarity < (onCurrent ? 0.6 : 0.72)) return;
   const onset = r.rms > S.noteRms*1.8;
   if (onCurrent){
-    S.hist.push((mf - S.note)*100); if (S.hist.length > 7) S.hist.shift();
+    S.hist.push(centsTo(r.freq, S.note)); if (S.hist.length > 7) S.hist.shift();
     S.noteRms = S.noteRms*0.8 + r.rms*0.2;
     S.lastSignal = now; S.freq = r.freq;
     if (now - S.pendingAt > 450){ S.pending = null; S.pendingCount = 0; }
@@ -407,7 +449,7 @@ function analyse(now){
   else { S.pending = cand; S.pendingCount = 1; S.pendingAt = now; }
   const need = S.note === null || now - S.lastSignal > 400 || onset ? 2 : 3;
   if (S.pendingCount >= need){
-    S.note = cand; S.hist = [(mf-cand)*100]; S.disp = S.hist[0];
+    S.note = cand; S.hist = [centsTo(r.freq, cand)]; S.disp = S.hist[0];
     S.locked = false; S.inZoneMs = 0; S.outMs = 0; document.body.classList.remove("locked");
     S.pending = null; S.pendingCount = 0; S.lastSignal = now; S.freq = r.freq; S.everHeard = true; S.noteRms = r.rms;
   }
@@ -420,7 +462,7 @@ function lock(){
   const el = $("note"); el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop");
   if (!reduced) S.bursts.push(performance.now());
   try{ navigator.vibrate && navigator.vibrate(35); }catch(e){}
-  const strs = INSTRUMENTS[S.inst];
+  const strs = curStrings();
   if (strs.length){
     if (strs.includes(S.note) && !S.tuned.has(S.note)){
       S.tuned.add(S.note);
@@ -439,7 +481,7 @@ function setText(id, v){ if (ui[id] !== v){ ui[id] = v; $(id).innerHTML = v; } }
 function setClass(id, v){ if (ui["c"+id] !== v){ ui["c"+id] = v; $(id).className = v; } }
 
 function renderStrings(){
-  const box = $("strings"), strs = INSTRUMENTS[S.inst];
+  const box = $("strings"), strs = curStrings();
   box.innerHTML = "";
   if (!strs.length){
     if (!S.recent.length){ box.innerHTML = '<div class="empty">Notes you lock in show up here.</div>'; }
@@ -451,7 +493,7 @@ function renderStrings(){
     const d = document.createElement("div");
     d.className = "str" + (S.tuned.has(n) ? " done" : "") + (n===S.note ? " now" : "");
     d.dataset.n = n;
-    d.innerHTML = "<b>"+nameOf(n)+"<span style=\"font-size:11px\">"+octOf(n)+"</span></b><span>"+hzOf(n).toFixed(2)+" Hz</span>";
+    d.innerHTML = "<b>"+nameOf(n)+"<span style=\"font-size:11px\">"+octOf(n)+"</span></b><span>"+fmtHz(hzOf(n))+"</span>";
     box.appendChild(d);
   }
   $("allset").hidden = S.tuned.size < new Set(strs).size;
@@ -565,6 +607,8 @@ function frame(now){
   if (!S.running) S.level *= 0.9;
 
   const since = now - S.lastSignal;
+  // Passing the tuner on: after 30 s of silence the gold string marks clear for the next player.
+  if (since > 30000 && (S.tuned.size || S.recent.length)){ S.tuned.clear(); S.recent = []; renderStrings(); }
   const active = S.note !== null && since < 250;
   const holding = S.note !== null && since < 1600;
   if (active && S.hist.length){
@@ -593,8 +637,8 @@ function frame(now){
   if (S.note !== null){
     const nm = nameOf(S.note), sharp = nm.length > 1;
     setText("note", nm[0] + (sharp ? "<sup>♯</sup>" : "") + "<sub>"+octOf(S.note)+"</sub>");
-    setText("target", nm + octOf(S.note) + " = " + hzOf(S.note).toFixed(2) + " Hz");
-    setText("hzTarget", hzOf(S.note).toFixed(2) + " Hz");
+    setText("target", nm + octOf(S.note) + " = " + fmtHz(hzOf(S.note),2) + " Hz");
+    setText("hzTarget", fmtHz(hzOf(S.note),2) + " Hz");
     setText("hzNow", holding ? (hzOf(S.note)*Math.pow(2,S.disp/1200)).toFixed(1) + " Hz" : "––");
     const cr = Math.round(S.disp);
     setText("cents", holding ? (cr>0?"+":cr<0?"−":"±") + Math.abs(cr) + "<small>¢</small>" : "±0<small>¢</small>");
@@ -627,13 +671,54 @@ $("tolSeg").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   S.tol = +b.dataset.v; store.set("tol", String(S.tol)); setSeg("tolSeg", S.tol);
 });
-$("nextBtn").addEventListener("click", () => {
+function resetBoard(){
   S.tuned.clear(); S.recent = []; S.locked = false; document.body.classList.remove("locked");
   S.note = null; S.hist = []; S.everHeard = false; ui = {};
-  setText("note","A<sub>4</sub>"); setText("target","A4 = 432 Hz"); setText("hzNow","––"); setText("hzTarget","––");
+  showIdle(); setText("hzNow","––"); setText("hzTarget","––");
   renderStrings();
+}
+function showIdle(){
+  const n = MODE.idle, nm = nameOf(n);
+  setText("note", nm[0] + (nm.length>1 ? "<sup>♯</sup>" : "") + "<sub>"+octOf(n)+"</sub>");
+  setText("target", nm + octOf(n) + " = " + fmtHz(hzOf(n),2) + " Hz");
+}
+function applyMode(){
+  $("brandRef").textContent = MODE.brand;
+  $("gateTitle").innerHTML = MODE.gate;
+  const pure = !!MODE.strings;
+  $("instLabel").hidden = pure; $("instSeg").hidden = pure;
+  document.querySelectorAll(".freq-opt").forEach(o => o.setAttribute("aria-selected", String(o.dataset.v === MODE_KEY)));
+}
+
+/* Frequency menu */
+const freqBtn = $("freqBtn"), freqMenu = $("freqMenu");
+const CHECK = '<svg class="chk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+for (const [k, m] of Object.entries(MODES)){
+  const o = document.createElement("button");
+  o.type = "button"; o.className = "freq-opt"; o.id = "freq-" + k; o.dataset.v = k;
+  o.setAttribute("role", "option");
+  o.innerHTML = "<span><b>"+m.title+"</b><small>"+m.sub+"</small></span>" + CHECK;
+  freqMenu.appendChild(o);
+}
+function setMenu(open){
+  freqMenu.hidden = !open; freqBtn.setAttribute("aria-expanded", String(open));
+  if (open){ const sel = freqMenu.querySelector('[aria-selected="true"]'); sel && sel.focus(); }
+}
+freqBtn.addEventListener("click", () => setMenu(freqMenu.hidden));
+freqMenu.addEventListener("click", e => {
+  const o = e.target.closest(".freq-opt"); if (!o) return;
+  setMenu(false); freqBtn.focus();
+  if (o.dataset.v === MODE_KEY) return;
+  MODE_KEY = o.dataset.v; MODE = MODES[MODE_KEY]; REF = MODE.ref; store.set("mode", MODE_KEY);
+  applyMode(); resetBoard();
 });
-$("toneBtn").addEventListener("click", playTone);
+freqMenu.addEventListener("keydown", e => {
+  const opts = [...freqMenu.querySelectorAll(".freq-opt")], i = opts.indexOf(document.activeElement);
+  if (e.key === "ArrowDown"){ e.preventDefault(); opts[(i+1)%opts.length].focus(); }
+  if (e.key === "ArrowUp"){ e.preventDefault(); opts[(i-1+opts.length)%opts.length].focus(); }
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !freqMenu.hidden){ setMenu(false); freqBtn.focus(); } });
+document.addEventListener("pointerdown", e => { if (!freqMenu.hidden && !$("freq").contains(e.target)) setMenu(false); });
 $("startBtn").addEventListener("click", start);
 $("micBtn").addEventListener("click", () => S.running ? stop() : start());
 $("wakeBtn").addEventListener("click", async () => { try{ await S.ctx.resume(); }catch(e){} $("wakeBtn").hidden = S.ctx && S.ctx.state === "running"; });
@@ -649,8 +734,8 @@ matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => rea
 
 /* ---------- Boot ---------- */
 applyTheme(store.get("theme", null));
-setSeg("instSeg", S.inst); setSeg("tolSeg", S.tol);
-renderStrings(); resize(); setMicUi();
+setSeg("instSeg", S.inst); setSeg("tolSeg", S.tol); applyMode();
+renderStrings(); resize(); setMicUi(); showIdle();
 requestAnimationFrame(frame);
 (async () => {
   if (store.get("auto","0") !== "1") return;
