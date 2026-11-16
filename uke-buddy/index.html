@@ -30,6 +30,23 @@
   h1 span{display:inline-block;animation:wiggle 3s ease-in-out infinite}
   .sub{margin:0;color:var(--soft);font-size:1.05rem}
 
+  /* Mic on/off button */
+  .micbtn{display:flex;align-items:center;gap:12px;width:100%;border:none;border-radius:999px;
+          padding:10px 18px;font-family:inherit;cursor:pointer;text-align:left;
+          box-shadow:0 4px 0 rgba(0,0,0,.1);transition:background .2s}
+  .micbtn:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.1)}
+  .micbtn .micicon{font-size:1.8rem}
+  .micbtn .mictxt{display:flex;flex-direction:column;line-height:1.15}
+  .micbtn b{font-size:1.25rem}
+  .micbtn small{font-size:.9rem;opacity:.85}
+  .micbtn .dot{width:14px;height:14px;border-radius:50%;flex:none}
+  .micbtn.on{background:#2BC46B;color:#fff}
+  .micbtn.on .dot{background:#fff;animation:blink 1.2s ease-in-out infinite}
+  .micbtn.off{background:#E4DEEC;color:var(--ink)}
+  .micbtn.off .dot{background:#A99BB8}
+  .sleepmsg{font-size:1.4rem;font-weight:600;margin:0 0 14px}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+
   /* String picker */
   .strings{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
   .str{
@@ -114,12 +131,19 @@
     <p class="sub">Let's tune your ukulele!</p>
   </header>
 
+  <button id="micBtn" class="micbtn off" aria-pressed="false">
+    <span class="dot"></span>
+    <span class="micicon">🎤</span>
+    <span class="mictxt"><b id="micLabel">Mic is OFF</b><small id="micSub">Tap to start listening</small></span>
+  </button>
+
   <div class="strings" id="strings"></div>
 
   <section id="stage">
     <!-- Start -->
     <div id="startPanel">
-      <div style="font-size:5.5rem">🎤</div>
+      <div style="font-size:5.5rem" id="startEmoji">🎤</div>
+      <div id="startMsg" class="sleepmsg" hidden></div>
       <button class="bigbtn" id="startBtn">Tap to Start!</button>
       <div class="note">Uke Buddy needs to <b>hear</b> your ukulele.<br>Say "Allow" if it asks about the microphone.</div>
       <div class="err" id="err" hidden></div>
@@ -163,6 +187,7 @@
       <li>Find a quiet spot and hold the phone near the ukulele.</li>
       <li>New strings stretch and go flat for the first week or two, so it's normal to retune every time you play.</li>
       <li>The little 🎤 bar shows how loudly Uke Buddy hears you. If it doesn't move when you pluck, check that the browser is allowed to use the microphone (iPhone: Settings → Safari → Microphone).</li>
+      <li>The <b>🎤 Mic</b> button at the top turns listening on and off. For privacy, the mic also turns itself off after 5 minutes, or as soon as you leave the page.</li>
       <li>This uses standard tuning: G C E A (string 1 to string 4), with A = 440 Hz.</li>
     </ul>
   </details>
@@ -189,6 +214,8 @@
   let current = 0;
   const done = [false, false, false, false];
   let ctx, analyser, buf, running = false;
+  let stream = null, srcNode = null, wakeLock = null, autoOffTimer = null, countdownTimer = null, micOffAt = 0;
+  const AUTO_OFF_MS = 5 * 60 * 1000;
   let pausedUntil = 0, inTuneSince = 0, lastSound = 0, history = [];
   let lastState = "";
 
@@ -417,29 +444,36 @@
   }
 
   // ---------- Start ----------
-  $("startBtn").addEventListener("click", async () => {
+  async function startMic() {
+    if (running) return;
     const err = $("err"); err.hidden = true;
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
         throw new Error("nomedia");
       if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
       const resumed = ctx.resume();     // must start during the tap on iPhone
-      const stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true }
       });
       await resumed;
       if (ctx.state !== "running") await ctx.resume();
-      const src = ctx.createMediaStreamSource(stream);
-      analyser = ctx.createAnalyser();
-      analyser.fftSize = 4096;
-      buf = new Float32Array(analyser.fftSize);
-      src.connect(analyser);
-      // Safari only processes audio that flows to the speakers, so send it there silently
-      const mute = ctx.createGain(); mute.gain.value = 0;
-      analyser.connect(mute).connect(ctx.destination);
+      srcNode = ctx.createMediaStreamSource(stream);
+      if (!analyser) {
+        analyser = ctx.createAnalyser();
+        analyser.fftSize = 4096;
+        buf = new Float32Array(analyser.fftSize);
+        // Safari only processes audio that flows to the speakers, so send it there silently
+        const mute = ctx.createGain(); mute.gain.value = 0;
+        analyser.connect(mute).connect(ctx.destination);
+      }
+      srcNode.connect(analyser);
       running = true;
-      try { if ("wakeLock" in navigator) await navigator.wakeLock.request("screen"); } catch (e) {}
-      $("startPanel").hidden = true; $("tunePanel").hidden = false;
+      requestWakeLock();
+      micOffAt = Date.now() + AUTO_OFF_MS;
+      autoOffTimer = setTimeout(() => stopMic("timeout"), AUTO_OFF_MS);
+      countdownTimer = setInterval(updateMicBtn, 1000);
+      updateMicBtn();
+      $("startPanel").hidden = true; $("tunePanel").hidden = false; $("donePanel").hidden = true;
       selectString(done.findIndex(d => !d) === -1 ? 0 : done.findIndex(d => !d));
       loop();
     } catch (e) {
@@ -448,18 +482,58 @@
         ? "This browser can't use the microphone here. Open the page from its https:// web address in Safari or Chrome."
         : "Uke Buddy couldn't hear anything. 🙉<br>Please allow the microphone and tap Start again.";
     }
-  });
+  }
+
+  function stopMic(reason) {
+    if (!running) return;
+    running = false;
+    clearTimeout(autoOffTimer); clearInterval(countdownTimer);
+    try { srcNode && srcNode.disconnect(); } catch (e) {}
+    if (stream) stream.getTracks().forEach(t => t.stop());   // really releases the microphone
+    stream = null; srcNode = null;
+    try { wakeLock && wakeLock.release(); } catch (e) {}
+    wakeLock = null;
+    try { ctx && ctx.suspend(); } catch (e) {}
+    history = []; inTuneSince = 0; lastState = "";
+    stage.className = "";
+    $("tunePanel").hidden = true; $("donePanel").hidden = true; $("startPanel").hidden = false;
+    $("startEmoji").textContent = "😴";
+    const m = $("startMsg"); m.hidden = false;
+    m.textContent = reason === "timeout" ? "Uke Buddy took a nap after 5 minutes." : "The microphone is off.";
+    $("startBtn").textContent = "Turn Mic On";
+    updateMicBtn(); renderStrings();
+  }
+
+  async function requestWakeLock() {
+    try { if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {}
+  }
+
+  function updateMicBtn() {
+    const b = $("micBtn");
+    b.classList.toggle("on", running); b.classList.toggle("off", !running);
+    b.setAttribute("aria-pressed", running);
+    if (running) {
+      const left = Math.max(0, Math.ceil((micOffAt - Date.now()) / 1000));
+      const mm = Math.floor(left / 60), ss = String(left % 60).padStart(2, "0");
+      $("micLabel").textContent = "Mic is ON · listening";
+      $("micSub").textContent = `Tap to turn off · naps in ${mm}:${ss}`;
+    } else {
+      $("micLabel").textContent = "Mic is OFF";
+      $("micSub").textContent = "Tap to start listening";
+    }
+  }
+
+  $("startBtn").addEventListener("click", startMic);
+  $("micBtn").addEventListener("click", () => running ? stopMic("button") : startMic());
 
   document.addEventListener("pointerdown", () => {
-    if (ctx && ctx.state !== "running") ctx.resume().catch(() => {});
+    if (running && ctx && ctx.state !== "running") ctx.resume().catch(() => {});
   });
 
-  document.addEventListener("visibilitychange", async () => {
-    if (document.visibilityState === "visible" && running) {
-      try { if (ctx.state === "suspended") await ctx.resume(); } catch (e) {}
-      try { if ("wakeLock" in navigator) await navigator.wakeLock.request("screen"); } catch (e) {}
-    }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") stopMic("left");
   });
+  window.addEventListener("pagehide", () => stopMic("left"));
 
   selectString(0);
 })();
