@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#FFF6E5">
+<title>Uke Buddy – Ukulele Tuner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FFF6E5; --ink:#3B2F4A; --soft:#7A6C8A; --card:#FFFFFF;
+    --good:#2BC46B; --close:#FFB020; --far:#FF6B6B;
+    --accent:#FF5C8A;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:"Fredoka",system-ui,sans-serif; color:var(--ink); background:var(--bg);
+    background-image:radial-gradient(circle at 10% 10%,#FFE3EC 0 80px,transparent 81px),
+                     radial-gradient(circle at 92% 22%,#DFF7F1 0 60px,transparent 61px),
+                     radial-gradient(circle at 85% 95%,#E6E9FF 0 90px,transparent 91px);
+    background-attachment:fixed;
+    user-select:none;
+  }
+  #app{max-width:520px;margin:0 auto;padding:16px 16px 40px;min-height:100%;display:flex;flex-direction:column;gap:14px}
+  header{text-align:center}
+  h1{margin:4px 0 0;font-size:2.2rem;font-weight:700;letter-spacing:.5px}
+  h1 span{display:inline-block;animation:wiggle 3s ease-in-out infinite}
+  .sub{margin:0;color:var(--soft);font-size:1.05rem}
+
+  /* String picker */
+  .strings{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .str{
+    border:none;border-radius:20px;padding:10px 4px 8px;background:var(--card);color:var(--ink);
+    font-family:inherit;cursor:pointer;box-shadow:0 4px 0 rgba(0,0,0,.08);
+    border:4px solid transparent;transition:transform .15s,border-color .15s;position:relative
+  }
+  .str .pal{font-size:1.7rem;line-height:1}
+  .str .num{font-size:1.5rem;font-weight:700;line-height:1.1}
+  .str .lbl{font-size:.8rem;color:var(--soft)}
+  .str.active{border-color:var(--c);transform:translateY(-3px) scale(1.04)}
+  .str .tick{position:absolute;top:-8px;right:-6px;font-size:1.3rem;display:none}
+  .str.done .tick{display:block}
+
+  /* Main stage */
+  #stage{background:var(--card);border-radius:28px;padding:20px 18px 22px;box-shadow:0 6px 0 rgba(0,0,0,.07);
+         text-align:center;transition:background .3s;flex:1;display:flex;flex-direction:column;justify-content:center}
+  #stage.low,#stage.high{background:#FFF0F0}
+  #stage.close{background:#FFF7E3}
+  #stage.good{background:#E8FBF0}
+
+  .bigbtn{
+    font-family:inherit;font-size:1.6rem;font-weight:700;border:none;border-radius:999px;
+    padding:20px 34px;background:var(--accent);color:#fff;cursor:pointer;
+    box-shadow:0 6px 0 #D63E6C;transition:transform .1s
+  }
+  .bigbtn:active{transform:translateY(4px);box-shadow:0 2px 0 #D63E6C}
+  .note{color:var(--soft);font-size:1rem;margin-top:14px}
+  .err{color:#D23B3B;font-size:1rem;margin-top:14px}
+
+  .now{font-size:1.5rem;font-weight:600}
+  .now b{color:var(--c);font-size:2rem}
+  #face{font-size:6.5rem;line-height:1.1;height:8rem;display:flex;align-items:center;justify-content:center}
+  #face.up{animation:bounceUp .7s ease-in-out infinite}
+  #face.down{animation:bounceDown .7s ease-in-out infinite}
+  #face.pop{animation:pop .5s ease-out}
+  #msg{font-size:2rem;font-weight:700;min-height:2.6rem}
+  #hint{font-size:1.1rem;color:var(--soft);min-height:1.5rem;margin-top:2px}
+
+  .meter{position:relative;height:46px;margin:18px 6px 8px;border-radius:999px;
+         background:linear-gradient(90deg,#FFC9C9 0%,#FFE7B0 38%,#BFF0D2 46%,#BFF0D2 54%,#FFE7B0 62%,#FFC9C9 100%)}
+  .meter .target{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:1.6rem}
+  .meter .end{position:absolute;top:50%;transform:translateY(-50%);font-size:1.5rem}
+  .meter .lo{left:8px}.meter .hi{right:8px}
+  #ball{position:absolute;top:50%;left:50%;width:38px;height:38px;border-radius:50%;
+        transform:translate(-50%,-50%);background:var(--c);border:4px solid #fff;
+        box-shadow:0 3px 6px rgba(0,0,0,.2);transition:left .12s linear,opacity .3s;opacity:.25}
+  .meterlbl{display:flex;justify-content:space-between;font-size:.85rem;color:var(--soft);margin:0 8px}
+
+  .row{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+  .smallbtn{font-family:inherit;font-size:1.15rem;font-weight:600;border:none;border-radius:999px;padding:12px 20px;
+            background:#EFE9F7;color:var(--ink);cursor:pointer;box-shadow:0 4px 0 rgba(0,0,0,.08)}
+  .smallbtn:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.08)}
+
+  #donePanel .big{font-size:6rem;line-height:1.1}
+  #donePanel h2{font-size:2rem;margin:6px 0}
+  #donePanel p{color:var(--soft);font-size:1.1rem;margin:0 0 18px}
+
+  details{background:rgba(255,255,255,.7);border-radius:18px;padding:10px 16px;font-size:1rem;color:var(--ink)}
+  summary{cursor:pointer;font-weight:600}
+  details li{margin:6px 0;line-height:1.35}
+
+  .confetti{position:fixed;top:-40px;font-size:1.8rem;pointer-events:none;z-index:9;animation:fall linear forwards}
+
+  [hidden]{display:none!important}
+
+  @keyframes bounceUp{0%,100%{transform:translateY(8px)}50%{transform:translateY(-12px)}}
+  @keyframes bounceDown{0%,100%{transform:translateY(-8px)}50%{transform:translateY(12px)}}
+  @keyframes pop{0%{transform:scale(.6)}60%{transform:scale(1.25)}100%{transform:scale(1)}}
+  @keyframes wiggle{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(6deg)}}
+  @keyframes fall{to{transform:translateY(110vh) rotate(540deg);opacity:.9}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1><span>🎸</span> Uke Buddy</h1>
+    <p class="sub">Let's tune your ukulele!</p>
+  </header>
+
+  <div class="strings" id="strings"></div>
+
+  <section id="stage">
+    <!-- Start -->
+    <div id="startPanel">
+      <div style="font-size:5.5rem">🎤</div>
+      <button class="bigbtn" id="startBtn">Tap to Start!</button>
+      <div class="note">Uke Buddy needs to <b>hear</b> your ukulele.<br>Say "Allow" if it asks about the microphone.</div>
+      <div class="err" id="err" hidden></div>
+    </div>
+
+    <!-- Tuning -->
+    <div id="tunePanel" hidden>
+      <div class="now">String <b id="numBig">1</b></div>
+      <div id="face">👂</div>
+      <div id="msg">Pluck string 1!</div>
+      <div id="hint">&nbsp;</div>
+      <div class="meter" aria-hidden="true">
+        <span class="end lo">🐻</span>
+        <span class="target">⭐</span>
+        <span class="end hi">🐭</span>
+        <div id="ball"></div>
+      </div>
+      <div class="meterlbl"><span>too low</span><span>just right</span><span>too high</span></div>
+      <div class="row">
+        <button class="smallbtn" id="hearBtn">🔊 Hear it</button>
+        <button class="smallbtn" id="skipBtn">Next string ➡️</button>
+      </div>
+    </div>
+
+    <!-- All done -->
+    <div id="donePanel" hidden>
+      <div class="big">🏆</div>
+      <h2>All tuned!</h2>
+      <p>Your ukulele sounds great.<br>Time to play some music! 🎶</p>
+      <button class="bigbtn" id="againBtn">Tune Again</button>
+    </div>
+  </section>
+
+  <details>
+    <summary>👋 For grown-ups</summary>
+    <ul>
+      <li><b>Which string is #1?</b> Hold the ukulele like you're going to play it. String 1 is the one <b>closest to the floor</b>. String 4 is the one closest to your face.</li>
+      <li><b>Higher</b> = tighten the peg (wind the string tighter). <b>Lower</b> = loosen it. Small turns! A tiny twist goes a long way.</li>
+      <li>Pluck one string at a time and let it ring. Uke Buddy moves to the next string by itself once one is right.</li>
+      <li>Find a quiet spot and hold the phone near the ukulele.</li>
+      <li>New strings stretch and go flat for the first week or two, so it's normal to retune every time you play.</li>
+      <li>This uses standard tuning: G C E A (string 4 to string 1), with A = 440 Hz.</li>
+    </ul>
+  </details>
+</div>
+
+<script>
+(() => {
+  // String 1 is closest to the floor (A). Standard re-entrant GCEA tuning, A4 = 440 Hz.
+  const STRINGS = [
+    { n: 1, note: "A", freq: 440.00, color: "#FF5C8A", pal: "🐱" },
+    { n: 2, note: "E", freq: 329.63, color: "#FF9F1C", pal: "🐸" },
+    { n: 3, note: "C", freq: 261.63, color: "#16B8A0", pal: "🐢" },
+    { n: 4, note: "G", freq: 392.00, color: "#6C7BFF", pal: "🦁" },
+  ];
+
+  const IN_TUNE = 7;        // cents counted as "perfect"
+  const CLOSE = 20;         // cents counted as "almost"
+  const HOLD_MS = 650;      // how long it must stay in tune
+
+  const $ = id => document.getElementById(id);
+  const stage = $("stage"), face = $("face"), msg = $("msg"), hint = $("hint"), ball = $("ball");
+
+  let current = 0;
+  const done = [false, false, false, false];
+  let ctx, analyser, buf, running = false;
+  let pausedUntil = 0, inTuneSince = 0, lastSound = 0, history = [];
+  let lastState = "";
+
+  // ---------- String buttons ----------
+  const stringsEl = $("strings");
+  STRINGS.forEach((s, i) => {
+    const b = document.createElement("button");
+    b.className = "str";
+    b.style.setProperty("--c", s.color);
+    b.innerHTML = `<span class="tick">✅</span><div class="pal">${s.pal}</div><div class="num" style="color:${s.color}">${s.n}</div><div class="lbl">string</div>`;
+    b.addEventListener("click", () => selectString(i));
+    stringsEl.appendChild(b);
+  });
+
+  function renderStrings() {
+    [...stringsEl.children].forEach((b, i) => {
+      b.classList.toggle("active", i === current && running);
+      b.classList.toggle("done", done[i]);
+    });
+  }
+
+  function selectString(i) {
+    current = i;
+    const s = STRINGS[i];
+    document.documentElement.style.setProperty("--c", s.color);
+    $("numBig").textContent = s.n;
+    history = []; inTuneSince = 0; lastState = "";
+    pausedUntil = performance.now() + 300;
+    if (running) {
+      $("tunePanel").hidden = false; $("donePanel").hidden = true;
+      setWaiting();
+    }
+    renderStrings();
+  }
+
+  // ---------- Display states ----------
+  function setState(state, faceTxt, faceCls, m, h) {
+    stage.className = state;
+    if (lastState !== state) {
+      face.className = "";
+      void face.offsetWidth;            // restart animation
+      face.className = faceCls || "";
+      lastState = state;
+    }
+    face.textContent = faceTxt;
+    msg.textContent = m;
+    hint.textContent = h || " ";
+  }
+  function setWaiting() {
+    const s = STRINGS[current];
+    setState("", "👂", "", `Pluck string ${s.n}!`, "Then let it ring...");
+    ball.style.opacity = .25; ball.style.left = "50%";
+  }
+
+  // ---------- Pitch detection (YIN) ----------
+  function detectPitch(data, sr) {
+    let rms = 0;
+    for (let i = 0; i < data.length; i++) rms += data[i] * data[i];
+    rms = Math.sqrt(rms / data.length);
+    if (rms < 0.008) return -1;
+
+    const minLag = Math.floor(sr / 900), maxLag = Math.ceil(sr / 160);
+    const W = data.length - maxLag;
+    const d = new Float32Array(maxLag + 1);
+    for (let tau = 1; tau <= maxLag; tau++) {
+      let sum = 0;
+      for (let i = 0; i < W; i++) { const x = data[i] - data[i + tau]; sum += x * x; }
+      d[tau] = sum;
+    }
+    // cumulative mean normalized difference
+    let running = 0; d[0] = 1;
+    for (let tau = 1; tau <= maxLag; tau++) {
+      running += d[tau];
+      d[tau] = running ? d[tau] * tau / running : 1;
+    }
+    let tau = -1;
+    for (let t = minLag; t < maxLag; t++) {
+      if (d[t] < 0.15) {
+        while (t + 1 < maxLag && d[t + 1] < d[t]) t++;
+        tau = t; break;
+      }
+    }
+    if (tau < 0) return -1;
+    // parabolic interpolation
+    const a = d[tau - 1], b = d[tau], c = d[tau + 1];
+    const denom = a - 2 * b + c;
+    const better = denom ? tau + (a - c) / (2 * denom) : tau;
+    return sr / better;
+  }
+
+  function median(arr) { const s = [...arr].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; }
+
+  function loop() {
+    if (!running) return;
+    requestAnimationFrame(loop);
+    const now = performance.now();
+    if (now < pausedUntil || $("tunePanel").hidden) return;
+
+    analyser.getFloatTimeDomainData(buf);
+    const f = detectPitch(buf, ctx.sampleRate);
+
+    if (f < 0) {
+      if (now - lastSound > 900) { history = []; inTuneSince = 0; if (lastState !== "") setWaiting(); }
+      return;
+    }
+    lastSound = now;
+    history.push(f); if (history.length > 7) history.shift();
+    if (history.length < 3) return;
+
+    const target = STRINGS[current].freq;
+    let cents = 1200 * Math.log2(median(history) / target);
+    // forgive octave mistakes in detection (harmonics)
+    if (Math.abs(cents - 1200) < 80) cents -= 1200;
+    else if (Math.abs(cents + 1200) < 80) cents += 1200;
+
+    const pos = 50 + Math.max(-50, Math.min(50, cents)) ;   // ±50 cents across the bar
+    ball.style.opacity = 1; ball.style.left = pos + "%";
+
+    const ac = Math.abs(cents);
+    if (ac <= IN_TUNE) {
+      setState("good", "😄", "pop", "Perfect! Hold it...", "Keep it ringing");
+      if (!inTuneSince) inTuneSince = now;
+      if (now - inTuneSince > HOLD_MS) success();
+    } else {
+      inTuneSince = 0;
+      if (ac <= CLOSE) {
+        cents < 0
+          ? setState("close", "🤏", "up", "So close! A tiny bit higher", "Just a teeny twist tighter")
+          : setState("close", "🤏", "down", "So close! A tiny bit lower", "Just a teeny twist looser");
+      } else if (cents < 0) {
+        setState("low", "⬆️", "up", ac > 300 ? "Way too low! Go HIGHER" : "Too low! Go HIGHER", "Tighten the peg a little");
+      } else {
+        setState("high", "⬇️", "down", ac > 300 ? "Way too high! Go LOWER" : "Too high! Go LOWER", "Loosen the peg a little");
+      }
+    }
+  }
+
+  // ---------- Success ----------
+  function success() {
+    done[current] = true;
+    pausedUntil = performance.now() + 1800;
+    inTuneSince = 0; history = [];
+    setState("good", "🎉", "pop", `String ${STRINGS[current].n} is done!`, "Great job!");
+    renderStrings();
+    chime(); confetti();
+    setTimeout(() => {
+      const next = done.findIndex((d, i) => !d && i > current);
+      const any = done.findIndex(d => !d);
+      if (any === -1) showDone();
+      else selectString(next !== -1 ? next : any);
+    }, 1700);
+  }
+
+  function showDone() {
+    $("tunePanel").hidden = true; $("donePanel").hidden = false;
+    stage.className = "good"; renderStrings();
+    confetti(40);
+    setTimeout(() => chime([523.25, 659.25, 783.99, 1046.5]), 100);
+  }
+
+  // ---------- Sounds ----------
+  function chime(notes = [783.99, 1046.5]) {
+    if (!ctx) return;
+    notes.forEach((f, i) => {
+      const t = ctx.currentTime + i * 0.12;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sine"; o.frequency.value = f;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.18, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+      o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + 0.65);
+    });
+  }
+
+  function pluck(freq) {
+    const t = ctx.currentTime, out = ctx.createGain();
+    out.gain.setValueAtTime(0, t);
+    out.gain.linearRampToValueAtTime(0.35, t + 0.01);
+    out.gain.exponentialRampToValueAtTime(0.001, t + 2.2);
+    out.connect(ctx.destination);
+    [[1, 1], [2, 0.45], [3, 0.2], [4, 0.08]].forEach(([h, amp]) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "triangle"; o.frequency.value = freq * h; g.gain.value = amp;
+      o.connect(g).connect(out); o.start(t); o.stop(t + 2.3);
+    });
+  }
+
+  $("hearBtn").addEventListener("click", () => {
+    if (!ctx) return;
+    pluck(STRINGS[current].freq);
+    pausedUntil = performance.now() + 2400;   // don't listen to our own sound
+    history = []; inTuneSince = 0;
+    setState("", "🎵", "pop", "Listen...", `This is how string ${STRINGS[current].n} should sound`);
+    ball.style.opacity = .25; ball.style.left = "50%";
+    setTimeout(() => { if (performance.now() >= pausedUntil - 50) setWaiting(); }, 2450);
+  });
+
+  $("skipBtn").addEventListener("click", () => selectString((current + 1) % 4));
+
+  $("againBtn").addEventListener("click", () => {
+    done.fill(false); selectString(0);
+  });
+
+  function confetti(count = 22) {
+    const bits = ["🎉", "⭐", "🎵", "💖", "✨", "🎶", "🌟"];
+    for (let i = 0; i < count; i++) {
+      const s = document.createElement("span");
+      s.className = "confetti";
+      s.textContent = bits[Math.floor(Math.random() * bits.length)];
+      s.style.left = Math.random() * 100 + "vw";
+      s.style.animationDuration = 1.6 + Math.random() * 1.6 + "s";
+      s.style.animationDelay = Math.random() * 0.4 + "s";
+      document.body.appendChild(s);
+      setTimeout(() => s.remove(), 3800);
+    }
+  }
+
+  // ---------- Start ----------
+  $("startBtn").addEventListener("click", async () => {
+    const err = $("err"); err.hidden = true;
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+        throw new Error("nomedia");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+      });
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (ctx.state === "suspended") await ctx.resume();
+      const src = ctx.createMediaStreamSource(stream);
+      analyser = ctx.createAnalyser();
+      analyser.fftSize = 4096;
+      buf = new Float32Array(analyser.fftSize);
+      src.connect(analyser);
+      running = true;
+      try { if ("wakeLock" in navigator) await navigator.wakeLock.request("screen"); } catch (e) {}
+      $("startPanel").hidden = true; $("tunePanel").hidden = false;
+      selectString(done.findIndex(d => !d) === -1 ? 0 : done.findIndex(d => !d));
+      loop();
+    } catch (e) {
+      err.hidden = false;
+      err.innerHTML = e.message === "nomedia"
+        ? "This browser can't use the microphone here. Open the page from its https:// web address in Safari or Chrome."
+        : "Uke Buddy couldn't hear anything. 🙉<br>Please allow the microphone and tap Start again.";
+    }
+  });
+
+  document.addEventListener("visibilitychange", async () => {
+    if (document.visibilityState === "visible" && running) {
+      try { if (ctx.state === "suspended") await ctx.resume(); } catch (e) {}
+      try { if ("wakeLock" in navigator) await navigator.wakeLock.request("screen"); } catch (e) {}
+    }
+  });
+
+  selectString(0);
+})();
+</script>
+</body>
+</html>
