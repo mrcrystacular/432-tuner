@@ -157,25 +157,26 @@
   <details>
     <summary>👋 For grown-ups</summary>
     <ul>
-      <li><b>Which string is #1?</b> Hold the ukulele like you're going to play it. String 1 is the one <b>closest to the floor</b>. String 4 is the one closest to your face.</li>
+      <li><b>Which string is #1?</b> Hold the ukulele like you're going to play it. String 1 is the one <b>closest to your face</b>. String 4 is the one closest to the floor.</li>
       <li><b>Higher</b> = tighten the peg (wind the string tighter). <b>Lower</b> = loosen it. Small turns! A tiny twist goes a long way.</li>
       <li>Pluck one string at a time and let it ring. Uke Buddy moves to the next string by itself once one is right.</li>
       <li>Find a quiet spot and hold the phone near the ukulele.</li>
       <li>New strings stretch and go flat for the first week or two, so it's normal to retune every time you play.</li>
       <li>The little 🎤 bar shows how loudly Uke Buddy hears you. If it doesn't move when you pluck, check that the browser is allowed to use the microphone (iPhone: Settings → Safari → Microphone).</li>
-      <li>This uses standard tuning: G C E A (string 4 to string 1), with A = 440 Hz.</li>
+      <li>This uses standard tuning: G C E A (string 1 to string 4), with A = 440 Hz.</li>
     </ul>
   </details>
 </div>
 
 <script>
 (() => {
-  // String 1 is closest to the floor (A). Standard re-entrant GCEA tuning, A4 = 440 Hz.
+  // String 1 is closest to your face (G), string 4 closest to the floor (A).
+  // Standard re-entrant GCEA tuning, A4 = 440 Hz.
   const STRINGS = [
-    { n: 1, note: "A", freq: 440.00, color: "#FF5C8A", pal: "🐱" },
-    { n: 2, note: "E", freq: 329.63, color: "#FF9F1C", pal: "🐸" },
-    { n: 3, note: "C", freq: 261.63, color: "#16B8A0", pal: "🐢" },
-    { n: 4, note: "G", freq: 392.00, color: "#6C7BFF", pal: "🦁" },
+    { n: 1, note: "G", freq: 392.00, color: "#FF5C8A", pal: "🐱" },
+    { n: 2, note: "C", freq: 261.63, color: "#FF9F1C", pal: "🐸" },
+    { n: 3, note: "E", freq: 329.63, color: "#16B8A0", pal: "🐢" },
+    { n: 4, note: "A", freq: 440.00, color: "#6C7BFF", pal: "🦁" },
   ];
 
   const IN_TUNE = 7;        // cents counted as "perfect"
